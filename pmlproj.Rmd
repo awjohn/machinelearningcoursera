@@ -1,0 +1,113 @@
+# Practical Machine Learning - Course Project
+=============================================
+
+## Introduction
+
+The goal of this project is to predict the manner in which data collection exercise
+that collected a large amount of data about personal activity  [Reference:](http://groupware.les.inf.puc-rio.br/har)
+was carried out. 
+
+```{r,echo=FALSE,results="hide"}
+set.seed(1)
+x <- rnorm("100")
+mean(x)
+start.time<-Sys.time() 
+```
+
+## Read training data file ...
+```{r,echo=TRUE}
+library(caret)
+pmldata <- read.csv("pml-training.csv", na.strings=c("NA", "NULL","Not Available",""))
+dim(pmldata)
+
+pmlTestdata <- read.csv("pml-testing.csv", na.strings=c("NA", "NULL","Not Available",""))
+dim(pmlTestdata)
+```
+
+## ... remove cols with no data
+```{r}
+
+isNA <- apply(pmldata, c(2), function(x){sum(is.na(x))})
+pmldata <- subset(pmldata[, which(isNA == 0)], 
+                    select=-c(X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window, num_window))
+
+pmlTestdata <- subset(pmlTestdata[, which(isNA == 0)], 
+                    select=-c(X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window, num_window))
+
+## given the same seed, you get the same sequence.
+set.seed(125) 
+inTrain <- createDataPartition(y=pmldata$classe, p = 0.75,list=FALSE)
+training <- pmldata[ inTrain,]
+testing <- pmldata[-inTrain,]
+
+## Training methodology: Random Forest
+```{r,echo=TRUE}
+ctrl <- trainControl(method="cv", number=4)
+modFit <- train(classe~., data=training, method="rf", ntree=10)
+rfPred <- predict(modFit, newdata=testing)
+##rfPred
+```
+
+## Check predictions against the partitioned test data set.
+```{r,echo=TRUE}
+sum(rfPred == testing$classe)/length(rfPred)
+confusionMatrix(testing$classe, rfPred)
+```
+
+
+## Check Random Forest variable importance
+```{r,echo=TRUE}
+testRFPred <- predict(modFit, newdata=pmlTestdata)
+
+##testRFPred
+##pml_write_files(testRFPred)
+
+varImp(modFit)
+```
+
+## Train smaller Random Forest Model
+```{r,echo=TRUE}
+
+smallpmlData <- subset(pmldata, 
+                    select=c(roll_belt, pitch_forearm, yaw_belt, magnet_dumbbell_y, pitch_belt, magnet_dumbbell_z, roll_forearm, accel_dumbbell_y, roll_dumbbell, magnet_dumbbell_x,classe))
+smallerModFit <- train(classe ~ ., data=smallpmlData[inTrain,], model="rf", ntree=10)
+
+predict(smallerModFit, newdata=pmlTestdata)
+
+smallPred <- predict(smallerModFit, newdata=testing)
+sum(smallPred == testing$classe) / length(smallPred)
+
+confusionMatrix(testing$classe, smallPred)
+
+print(modFit$finalModel)
+
+
+```
+
+## Graphics
+Here is a plot of the model's prediction relationship to the testing data
+```{r scatterplot,fig.height=4}
+qplot(rfPred, classe, data=testing)
+```
+
+```{r,echo=FALSE,results="hide"}
+Sys.time()-start.time      
+```
+
+## Conclusion
+- Random forest
+  - iterative split into groups
+  - Classification tree to explore interation between variables
+Cross validation
+- used cross validation on the training control with 
+- a crossvalidation with exactly the same splitting 
+- very slow, took 25 minutes to run
+- cross validate to pick predictors estimate requires estimate errors on independent data
+- In random forests, there is no need for cross-validation or a separate test 
+set to get an unbiased estimate of the test set error. It is estimated internally
+
+what you think the expected out of sample error is
+- In sample error < out of sample error guaranteeing that overfitting did not occur
+- the out of sample error estimate from the confusion matrix
+why you made the choices you did
+- Other model were not very accurate and were very time consuming
